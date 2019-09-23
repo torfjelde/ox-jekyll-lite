@@ -36,9 +36,9 @@
 ;; For publishing, `org-jekyll-md-publish-to-md' is available.
 ;; For composing, `org-jekyll-md-insert-export-options-template' is available.
 
-;; TODO Get equations rendering correctly.
-
 (require 'ox-md)
+(require 's)
+(require 'dash)
 
 ;;; User Configurable Variables
 
@@ -56,13 +56,12 @@ the file:
 
 #+BEGIN_EXPORT HTML
 ---
-layout: post
-title: \"Upgrading Octopress\"
-date: 2013-09-15 22:08
-categories: [octopress, rubymine]
-tags: tech news
-keywords: Octopress
-description: Instructions on Upgrading Octopress
+title: \"Exporting Org to Markdown in Jekyll\"
+date: 2019-09-15
+categories: post
+tags: tech 
+keywords: Markdown Jekyll Org
+excerpt: Details on exporting org files into a jekyll-friendly markdown format.
 ---
 #+END_EXPORT HTML"
   :group 'org-export-jekyll
@@ -96,6 +95,9 @@ description: Instructions on Upgrading Octopress
     (inner-template . org-jekyll-md-inner-template) ;; force body-only
     (footnote-reference . org-jekyll-md-footnote-reference)
     (src-block . org-jekyll-md-src-block)
+    (latex-environment . org-jekyll-md-latex-environment)
+    (latex-fragment . org-jekyll-md-latex-fragment)
+    (link . org-jekyll-md-link)
     (table . org-jekyll-md-table)
     (table-cell . org-jekyll-md-table-cell)
     (table-row . org-jekyll-md-table-row)
@@ -105,11 +107,78 @@ description: Instructions on Upgrading Octopress
     (:jekyll-categories "JEKYLL_CATEGORIES" nil org-jekyll-md-categories)
     (:jekyll-tags "JEKYLL_TAGS" nil org-jekyll-md-tags)))
 
+;; TODO nuke this
+
+;; (defun org-jekyll-md-clean-url (url)
+;;   "Map org-style links that begin with https: to begin with https://"
+;;   (cond ((and (string-prefix-p "http:" url)
+;;            (not (string-prefix-p "http://" url)))
+;;          (replace-regexp-in-string "http:" "http://" url))
+;;         ((and (string-prefix-p "https:" url)
+;;            (not (string-prefix-p "https://" url)))
+;;          (replace-regexp-in-string "https:" "https://" url))
+;;         (t url)))
+
+
+(defun org-jekyll-md-resolve-file-path (path)
+  "Resolve a file path so that it treats the jekyll directory as root."
+  ;; TODO implement me!
+  (let ((jekyll-path path))
+    jekyll-path))
+
+
+(defun org-jekyll-md-file-is-image? (raw-link)
+  "Tests whether RAW-LINK is a link to an image file."
+  (let* ((image-suffixes '(".apng" ".bmp" ".gif" ".ico" ".cur" ".jpg" ".jpeg" ".jfif"
+                          ".pjpeg" ".pjp" ".png" ".svg" ".webp"))
+         (suffix-matches (--filter (s-ends-with? it raw-link t) image-suffixes)))
+    (not (null suffix-matches))))
+
+;;;; Links
+(defun org-jekyll-md-link (link desc info)
+  "Transcode a LINK into Markdown format. 
+
+DESC is the links description. 
+INFO is a plist used as a communication channel. 
+
+This function will:
+- render images appropriately
+- return file paths relative to the jekyll project root
+- throw an exception if file paths are not in jekyll project
+
+Supported link types:
+- mailto
+- http/https
+- file"
+  (let* ((raw-link (org-element-property :raw-link link))
+         (raw-path (org-element-property :path link))
+         (type (org-element-property :type link))
+         (desc (if desc desc raw-path)))
+    (message "[ox-hugo-link DBG] link: %S" link)
+    (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
+    (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
+    (message "[ox-hugo-link DBG] link type: %s" type)
+    (cond
+     ;; file links. make file paths treat jekyll root as root.
+     ((string= type "file")
+      (let* ((jekyll-path (org-jekyll-md-resolve-file-path raw-path)))
+        (if (org-jekyll-md-file-is-image? raw-path)
+            ;; it's an image, so prepend a bang
+            (format "![%s](%s)" desc jekyll-path)
+          ;; non-image file, so no bang
+          (format "[%s](%s)" desc jekyll-path))))        
+     (t
+      ;; none of the above. just use the raw link.
+      (if desc
+          (format "[%s](%s)" desc raw-link)
+        (format "[%s](%s)" raw-link raw-link))))))
 
 ;;;; Footnote Reference
 (defun org-jekyll-md-footnote-reference (footnote-reference _contents info)
-  "Transcode a FOOTNOTE-REFERENCE element into Blackfriday Markdown format.
-CONTENTS is nil.  INFO is a plist holding contextual information."
+  "Transcode a FOOTNOTE-REFERENCE element into Jekyll-Md Markdown format.
+CONTENTS is nil.  INFO is a plist holding contextual information.
+
+Adapted from ox-blackfriday, via ox-hugo."
   ;; (message "footref: %s" footnote-reference)
   (concat
    ;; Insert separator between two footnotes in a row.
@@ -121,14 +190,10 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 ;;;; Footnote section
 (defun org-jekyll-md-footnote-section (info)
   "Format the footnote section.
-INFO is a plist used as a communication channel."
+INFO is a plist used as a communication channel.
+
+Adapted from ox-blackfriday, via ox-hugo."
   (let ((fn-alist (org-export-collect-footnote-definitions info))
-        ;; Fri Jul 21 14:33:25 EDT 2017 - kmodi
-        ;; TODO: Need to learn using cl-loop
-        ;; Below form from ox-md did not work.
-        ;; (fn-alist-stripped
-        ;;  (cl-loop for (n raw) in fn-alist collect
-        ;;           (cons n (org-trim (org-export-data raw info)))))
         fn-alist-stripped)
     (let ((n 1)
           def)
@@ -153,6 +218,87 @@ INFO is a plist used as a communication channel."
                            (cdr fn)))   ;footnote definition
                  (nreverse fn-alist-stripped)
                  "\n"))))
+
+;;;; Latex Environment
+(defun org-jekyll-md-latex-environment (latex-environment _contents info)
+  "Transcode a LATEX-ENVIRONMENT object into Markdown format.
+INFO is a plist holding contextual information.
+
+Adapted from ox-blackfriday via ox-hugo."
+  (let ((processing-type (plist-get info :with-latex)))
+    (cond
+     ((memq processing-type '(t mathjax))
+      (let* ((latex-env (org-remove-indentation
+                         (org-element-property :value latex-environment)))
+             (env (org-html-format-latex latex-env 'mathjax info))
+             (env (org-jekyll-md-escape-chars-in-equation env)))
+        env))
+     (t
+      (org-html-latex-environment latex-environment nil info)))))
+
+;;;; Latex Fragment
+(defun org-jekyll-md-latex-fragment (latex-fragment _contents info)
+  "Transcode a LATEX-FRAGMENT object into Markdown format.
+INFO is a plist holding contextual information.
+
+Adapted from ox-blackfriday via ox-hugo."
+  (let ((processing-type (plist-get info :with-latex)))
+    (cond
+     ((memq processing-type '(t mathjax))
+      (let* ((latex-frag (org-element-property :value latex-fragment))
+             (frag (org-html-format-latex latex-frag 'mathjax info))
+             (frag (org-jekyll-md-escape-chars-in-equation frag)))
+        ;; (message "[ox-bf-latex-frag DBG] frag: %s" frag)
+        frag))
+     (t
+      (org-html-latex-fragment latex-fragment nil info)))))
+
+;;;; Escape certain characters inside equations (Blackfriday bug workaround)
+(defun org-jekyll-md-escape-chars-in-equation (str)
+  "Escape few characters in STR so that Markdown doesn't parse them.
+
+Adapted from ox-blackfriday via ox-hugo.
+
+Do not interpret underscores and asterisks in equations as
+Markdown formatting
+characters (https://gohugo.io/content-management/formats#solution):
+  \"_\" -> \"\\=\\_\"
+  \"*\" -> \"\\=\\*\"
+https://github.com/kaushalmodi/ox-hugo/issues/104
+Blackfriday converts \"(r)\" to Registered Trademark symbol,
+\"(c)\" to Copyright symbol, and \"(tm)\" to Trademark symbol if
+the SmartyPants extension is enabled (and there is no way to
+disable just this).  So insert an extra space after the opening
+parentheses in those strings to trick Blackfriday/smartParens
+from activating inside equations.  That extra space anyways
+doesn't matter in equations.
+  \"(c)\" -> \"( c)\"
+  \"(r)\" -> \"( r)\"
+  \"(tm)\" -> \"( tm)\"
+https://gohugo.io/content-management/formats#solution
+https://github.com/kaushalmodi/ox-hugo/issues/138
+Need to escape the backslash in \"\\(\", \"\\)\", .. to make
+Blackfriday happy.  So:
+  \"\\(\" -> \"\\\\(\"
+  \"\\)\" -> \"\\\\)\"
+  \"\\\\=[\" -> \"\\\\\\=[\"
+  \"\\\\=]\" -> \"\\\\\\=]\"
+  \"\\\\={\" -> \"\\\\\\={\"
+  \"\\\\=}\" -> \"\\\\\\=}\"
+  \"\\|\" -> \"\\\\|\"
+and finally:
+  \"\\\\\" -> \"\\\\\\\\\\\\\"."
+  (let* (;; _ -> \_, * -> \*
+         (escaped-str (replace-regexp-in-string "[_*]" "\\\\\\&" str))
+         ;; (c) -> ( c), (r) -> ( r), (tm) -> ( tm)
+         (escaped-str (replace-regexp-in-string "(\\(c\\|r\\|tm\\))" "( \\1)" escaped-str))
+         ;; \( -> \\(, \) -> \\), \[ -> \\[, \] -> \\], \{ -> \\{, \} -> \\}, \| -> \\|
+         (escaped-str (replace-regexp-in-string "\\(\\\\[](){}[|]\\)" "\\\\\\1" escaped-str))
+         (escaped-str (replace-regexp-in-string
+                       "\\([^\\]\\)\\\\\\{2\\}[[:blank:]]*$" ;Replace "\\" at EOL with:
+                       "\\1\\\\\\\\\\\\\\\\\\\\\\\\"             ;"\\\\\\"
+                       escaped-str)))
+    escaped-str))
 
 
 ;;; Headline
@@ -203,9 +349,10 @@ Assume BACKEND is `jekyll'."
   tree)
 
 (defun org-jekyll-md-src-block (src-block contents info)
-  "Transcode SRC-BLOCK element into Github Flavored Markdown
-format. CONTENTS is nil.  INFO is a plist used as a communication
-channel."
+  "Transcode SRC-BLOCK element into Markdown format. CONTENTS is
+nil.  INFO is a plist used as a communication channel.
+
+Adapted from ox-gfm."
   (let* ((lang (org-element-property :language src-block))
          (code (org-export-format-code-default src-block info))
          (prefix (concat "```" lang "\n"))
@@ -242,8 +389,7 @@ holding export options."
       (concat
        (org-jekyll-md--yaml-front-matter info)
        contents)
-    contents
-    ))
+    contents))
 
 (defun org-jekyll-md-inner-template (contents info)
   "Return body of document string after MD conversion.
@@ -263,7 +409,8 @@ holding export options."
 ;;; YAML Front Matter
 
 (defun org-jekyll-md--get-option (info property-name &optional default)
-  "Get org export options."
+  "Get org export options, or an optional default, or (finally)
+an empty string."
   (let ((property (org-export-data (plist-get info property-name) info)))
     (format "%s" (or property default ""))))
 
@@ -354,7 +501,7 @@ Return output file name."
         (categories (or categories org-jekyll-md-categories)))
     (save-excursion
       (insert (format (concat
-                       "#+TITLE: "             title
+                       "#+TITLE: "               title
                        "\n#+DATE: "              date
                        "\n#+SETUPFILE: "         setupfile
                        "\n#+JEKYLL_LAYOUT: "     layout
