@@ -1,10 +1,13 @@
 ;;; ox-jekyll-md.el --- Export Jekyll on Markdown articles using org-mode. -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018 Elsa Gonsiorowski
+;; Copyright (C) 2019 Peter Wills
 
 ;; Author: Elsa Gonsiorowski <gonsie@me.com>
-;; Author: Yoshinari Nomura <nom@quickhack.net>
-;; Author: Justin Gordon <justin.gordon@gmail.com>
+;; Authors: Yoshinari Nomura <nom@quickhack.net>
+;;          Justin Gordon <justin.gordon@gmail.com>
+;;          Matt Price <moptop99@gmail.com>
+;;          Kaushal Modi <kaushal.modi@gmail.com>
+;;          Peter Wills <peter@pwills.com>
 ;; Keywords: org, jekyll
 ;; Version: 0.1
 
@@ -33,9 +36,7 @@
 ;; For publishing, `org-jekyll-md-publish-to-md' is available.
 ;; For composing, `org-jekyll-md-insert-export-options-template' is available.
 
-;;; Code:
-
-;;; Dependencies
+;; TODO Get equations rendering correctly.
 
 (require 'ox-md)
 
@@ -67,13 +68,12 @@ description: Instructions on Upgrading Octopress
   :group 'org-export-jekyll
   :type 'boolean)
 
-
-(defcustom org-jekyll-md-layout "post"
+(defcustom org-jekyll-md-layout ""
   "Default layout used in Jekyll article."
   :group 'org-export-jekyll
   :type 'string)
 
-(defcustom org-jekyll-md-categories ""
+(defcustom org-jekyll-md-categories "post"
   "Default space-separated categories in Jekyll article."
   :group 'org-export-jekyll
   :type 'string)
@@ -83,38 +83,18 @@ description: Instructions on Upgrading Octopress
   :group 'org-export-jekyll
   :type 'string)
 
-(defcustom org-jekyll-md-use-src-plugin t
-   "If t, org-jekyll-md exporter eagerly uses plugins instead of
-original markdown stuff. For example:
-
-   #+BEGIN_SRC ruby
-     puts \"Hello world\"
-   #+END_SRC
-
-makes:
-
-  {% highlight ruby %}
-  puts \"Hello world\"
-  {% endhighlight %}"
-  :group 'org-export-jekyll-use-src-plugin
-  :type 'boolean)
-
-(defcustom org-jekyll-md-use-todays-date t
-  "If t, org-jekyll-md exporter will prepend the filename with today's date."
-  :group 'org-export-jekyll
-  :type 'boolean)
-
 ;;; Define Back-End
 
 (org-export-define-derived-backend 'jekyll 'md
   :filters-alist '((:filter-parse-tree . org-jekyll-md-separate-elements))
   :menu-entry
   '(?j "Jekyll: export to Markdown with YAML front matter."
-       ((?M "As Jekyll buffer" (lambda (a s v b) (org-jekyll-md-export-as-md a s v)))
-        (?m "As Jekyll file" (lambda (a s v b) (org-jekyll-md-export-to-md a s v)))))
+       ((?J "As Jekyll buffer" (lambda (a s v b) (org-jekyll-md-export-as-md a s v)))
+        (?j "As Jekyll file" (lambda (a s v b) (org-jekyll-md-export-to-md a s v)))))
   :translate-alist
   '((headline . org-jekyll-md-headline-offset)
     (inner-template . org-jekyll-md-inner-template) ;; force body-only
+    (footnote-reference . org-jekyll-md-footnote-reference)
     (src-block . org-jekyll-md-src-block)
     (table . org-jekyll-md-table)
     (table-cell . org-jekyll-md-table-cell)
@@ -124,6 +104,55 @@ makes:
   '((:jekyll-layout "JEKYLL_LAYOUT" nil org-jekyll-md-layout)
     (:jekyll-categories "JEKYLL_CATEGORIES" nil org-jekyll-md-categories)
     (:jekyll-tags "JEKYLL_TAGS" nil org-jekyll-md-tags)))
+
+
+;;;; Footnote Reference
+(defun org-jekyll-md-footnote-reference (footnote-reference _contents info)
+  "Transcode a FOOTNOTE-REFERENCE element into Blackfriday Markdown format.
+CONTENTS is nil.  INFO is a plist holding contextual information."
+  ;; (message "footref: %s" footnote-reference)
+  (concat
+   ;; Insert separator between two footnotes in a row.
+   (let ((prev (org-export-get-previous-element footnote-reference info)))
+     (and (eq (org-element-type prev) 'footnote-reference)
+          (plist-get info :html-footnote-separator)))
+   (format "[^fn%d]" (org-export-get-footnote-number footnote-reference info))))
+
+;;;; Footnote section
+(defun org-jekyll-md-footnote-section (info)
+  "Format the footnote section.
+INFO is a plist used as a communication channel."
+  (let ((fn-alist (org-export-collect-footnote-definitions info))
+        ;; Fri Jul 21 14:33:25 EDT 2017 - kmodi
+        ;; TODO: Need to learn using cl-loop
+        ;; Below form from ox-md did not work.
+        ;; (fn-alist-stripped
+        ;;  (cl-loop for (n raw) in fn-alist collect
+        ;;           (cons n (org-trim (org-export-data raw info)))))
+        fn-alist-stripped)
+    (let ((n 1)
+          def)
+      (dolist (fn fn-alist)
+        ;; (message "fn: %S" fn)
+        ;; (message "fn: %s" (org-export-data fn info)) ;This gives error
+        ;; (message "fn nth 2 car: %s" (org-export-data (nth 2 fn) info))
+        (setq def (org-trim (org-export-data (nth 2 fn) info)))
+        ;; Support multi-line footnote definitions by folding all
+        ;; footnote definition lines into a single line as Blackfriday
+        ;; does not support that.
+        (setq def (replace-regexp-in-string "\n" " " def))
+        ;; Replace multiple consecutive spaces with a single space.
+        (setq def (replace-regexp-in-string "[[:blank:]]+" " " def))
+        (push (cons n def) fn-alist-stripped)
+        (setq n (1+ n))))
+    (when fn-alist-stripped
+      (mapconcat (lambda (fn)
+                   ;; (message "dbg: fn: %0d -- %s" (car fn) (cdr fn))
+                   (format "[^fn%d]: %s"
+                           (car fn)     ;footnote number
+                           (cdr fn)))   ;footnote definition
+                 (nreverse fn-alist-stripped)
+                 "\n"))))
 
 
 ;;; Headline
@@ -174,18 +203,14 @@ Assume BACKEND is `jekyll'."
   tree)
 
 (defun org-jekyll-md-src-block (src-block contents info)
-  "Optionally transcode SRC-BLOCK element into jekyll code template format.
-
-Use `highlight` / `endhighlight` if `org-jekyll-md-use-src-plugin` is t. Otherwise,
-perform `org-md-src-block`. CONTENTS holds the contents of the item. INFO is a
-plist used as a communication channel."
-  (if org-jekyll-md-use-src-plugin
-      (let ((language (org-element-property :language src-block))
-            (value (org-remove-indentation
-                    (org-element-property :value src-block))))
-        (format "{%% highlight %s %%}\n%s{%% endhighlight %%}"
-                language value))
-    (org-export-with-backend 'md src-block contents info)))
+  "Transcode SRC-BLOCK element into Github Flavored Markdown
+format. CONTENTS is nil.  INFO is a plist used as a communication
+channel."
+  (let* ((lang (org-element-property :language src-block))
+         (code (org-export-format-code-default src-block info))
+         (prefix (concat "```" lang "\n"))
+         (suffix "```"))
+    (concat prefix code suffix)))
 
 (defun org-jekyll-md-table (table contents info)
   "Empty transformation. Org tables should be valid kramdown syntax."
@@ -232,8 +257,8 @@ holding export options."
    ;; Document contents.
    contents
    ;; Footnotes section.
-   (org-md--footnote-section info)))
-
+   "\n\n<!----- Footnotes ----->\n\n"
+   (org-jekyll-md-footnote-section info)))
 
 ;;; YAML Front Matter
 
@@ -248,49 +273,49 @@ holding export options."
          (lambda (arg)
            (mapconcat #'(lambda (text)(concat "\n- " text))
                       (split-string arg) " "))))
-    (let ((title
-           (concat "\ntitle: \""
-                   (org-jekyll-md--get-option info
-                                           :title) "\""))
-          (layout
-           (concat "\nlayout: "
-                   (org-jekyll-md--get-option info
-                                           :jekyll-layout org-jekyll-md-layout)))
-          (categories
-           (concat "\ncategories: "
-                   (funcall convert-to-yaml-list
-                            (org-jekyll-md--get-option
-                             info
-                             :jekyll-categories org-jekyll-md-categories))))
-          (tags
-           (concat "\ntags: "
-                   (funcall convert-to-yaml-list
-                            (org-jekyll-md--get-option
-                             info
-                             :jekyll-tags org-jekyll-md-tags))))
-          (date
-           (and (plist-get info :with-date)
-                (concat "\ndate: "
-                        (org-jekyll-md--get-option info :date)))))
+    (let* ((layout-value
+            (org-jekyll-md--get-option info
+                                       :jekyll-layout org-jekyll-md-layout))
+           
+           (title
+            (concat "\ntitle: \""
+                    (org-jekyll-md--get-option info
+                                               :title) "\""))
+           (excerpt
+            (concat "\nexcerpt: \""
+                    (org-jekyll-md--get-option info
+                                               :subtitle) "\""))
+           
+           ;; don't include the layout category if it's not specified
+           (layout (if (not (string= layout-value ""))
+                       (concat "\nlayout: " layout-value)
+                     ""))
+           
+           (categories
+            (concat "\ncategories: "
+                    (funcall convert-to-yaml-list
+                             (org-jekyll-md--get-option
+                              info
+                              :jekyll-categories org-jekyll-md-categories))))
+           (tags
+            (concat "\ntags: "
+                    (funcall convert-to-yaml-list
+                             (org-jekyll-md--get-option
+                              info
+                              :jekyll-tags org-jekyll-md-tags))))
+           (date
+            (and (plist-get info :with-date)
+                 (concat "\ndate: "
+                         (org-jekyll-md--get-option info :date)))))
       (concat
        "---"
        title
+       excerpt
        date
        layout
        categories
        tags
        "\n---\n"))))
-
-
-;;; Filename and Date Helper
-;;; optionally prepend filename with today's date
-
-(defun org-jekyll-md-filename-date ()
-  "Optionally include date in exported filename."
-  (if org-jekyll-md-use-todays-date
-      (format-time-string "%F-")
-    ""))
-
 
 ;;; End-User functions
 
@@ -305,8 +330,7 @@ holding export options."
 (defun org-jekyll-md-export-to-md (&optional async subtreep visible-only)
   "Export current buffer to a Markdown file adding some YAML front matter."
   (interactive)
-  (let ((outfile (concat (org-jekyll-md-filename-date)
-                         (org-export-output-file-name ".md" subtreep))))
+  (let ((outfile (org-export-output-file-name ".md" subtreep)))
     (org-export-to-file 'jekyll outfile async subtreep visible-only)))
 
 ;;;###autoload
