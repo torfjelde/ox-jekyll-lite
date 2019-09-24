@@ -82,6 +82,11 @@ excerpt: Details on exporting org files into a jekyll-friendly markdown format.
   :group 'org-export-jekyll
   :type 'string)
 
+(defcustom org-jekyll-project-root ""
+  "Root of jekyll project directory. Links will be modified to treat this directory as root."
+  :group 'org-export-jekyll
+  :type 'string)
+
 ;;; Define Back-End
 
 (org-export-define-derived-backend 'jekyll 'md
@@ -92,12 +97,13 @@ excerpt: Details on exporting org files into a jekyll-friendly markdown format.
         (?j "As Jekyll file" (lambda (a s v b) (org-jekyll-md-export-to-md a s v)))))
   :translate-alist
   '((headline . org-jekyll-md-headline-offset)
-    (inner-template . org-jekyll-md-inner-template) ;; force body-only
+    (inner-template . org-jekyll-md-inner-template) 
     (footnote-reference . org-jekyll-md-footnote-reference)
     (src-block . org-jekyll-md-src-block)
     (latex-environment . org-jekyll-md-latex-environment)
     (latex-fragment . org-jekyll-md-latex-fragment)
     (link . org-jekyll-md-link)
+    (underline . org-jekyll-md-underline)
     (table . org-jekyll-md-table)
     (table-cell . org-jekyll-md-table-cell)
     (table-row . org-jekyll-md-table-row)
@@ -107,24 +113,19 @@ excerpt: Details on exporting org files into a jekyll-friendly markdown format.
     (:jekyll-categories "JEKYLL_CATEGORIES" nil org-jekyll-md-categories)
     (:jekyll-tags "JEKYLL_TAGS" nil org-jekyll-md-tags)))
 
-;; TODO nuke this
 
-;; (defun org-jekyll-md-clean-url (url)
-;;   "Map org-style links that begin with https: to begin with https://"
-;;   (cond ((and (string-prefix-p "http:" url)
-;;            (not (string-prefix-p "http://" url)))
-;;          (replace-regexp-in-string "http:" "http://" url))
-;;         ((and (string-prefix-p "https:" url)
-;;            (not (string-prefix-p "https://" url)))
-;;          (replace-regexp-in-string "https:" "https://" url))
-;;         (t url)))
-
+;;;; Links
 
 (defun org-jekyll-md-resolve-file-path (path)
   "Resolve a file path so that it treats the jekyll directory as root."
-  ;; TODO implement me!
-  (let ((jekyll-path path))
-    jekyll-path))
+  (if (string= org-jekyll-project-root "")
+      (progn
+        (message "Variable org-jekyll-project-root is not set, \
+so file paths will be linked as provided.")
+        path)
+    (let ;; remove the trailing slash, so that it looks like e.g. "/assets/images/kitties.jpg"
+        ((org-jekyll-project-root-clean (s-chop-suffix "/" org-jekyll-project-root)))
+      (s-chop-prefix org-jekyll-project-root-clean path))))
 
 
 (defun org-jekyll-md-file-is-image? (raw-link)
@@ -134,7 +135,6 @@ excerpt: Details on exporting org files into a jekyll-friendly markdown format.
          (suffix-matches (--filter (s-ends-with? it raw-link t) image-suffixes)))
     (not (null suffix-matches))))
 
-;;;; Links
 (defun org-jekyll-md-link (link desc info)
   "Transcode a LINK into Markdown format. 
 
@@ -154,10 +154,10 @@ Supported link types:
          (raw-path (org-element-property :path link))
          (type (org-element-property :type link))
          (desc (if desc desc raw-path)))
-    (message "[ox-hugo-link DBG] link: %S" link)
-    (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
-    (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
-    (message "[ox-hugo-link DBG] link type: %s" type)
+    ;; (message "[ox-hugo-link DBG] link: %S" link)
+    ;; (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
+    ;; (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
+    ;; (message "[ox-hugo-link DBG] link type: %s" type)
     (cond
      ;; file links. make file paths treat jekyll root as root.
      ((string= type "file")
@@ -172,6 +172,13 @@ Supported link types:
       (if desc
           (format "[%s](%s)" desc raw-link)
         (format "[%s](%s)" raw-link raw-link))))))
+
+;;;; text
+(defun org-jekyll-md-underline (underline contents info)
+  "Transcode UNDERLINE from Org to Markdown.
+CONTENTS is the text with underline markup.  INFO is a plist
+holding contextual information."
+  (format "<u>%s</u>" contents))
 
 ;;;; Footnote Reference
 (defun org-jekyll-md-footnote-reference (footnote-reference _contents info)
@@ -348,12 +355,19 @@ Assume BACKEND is `jekyll'."
   ;; Return updated tree.
   tree)
 
+(defun org-jekyll-md-clean-language (language)
+  "Clean up the language tag from a source block.
+
+At the moment, only translate 'ipython' to 'python'."
+  (if (string= language "ipython") "python" language))
+
 (defun org-jekyll-md-src-block (src-block contents info)
   "Transcode SRC-BLOCK element into Markdown format. CONTENTS is
 nil.  INFO is a plist used as a communication channel.
 
 Adapted from ox-gfm."
-  (let* ((lang (org-element-property :language src-block))
+  (let* ((lang (org-jekyll-md-clean-language
+                (org-element-property :language src-block)))
          (code (org-export-format-code-default src-block info))
          (prefix (concat "```" lang "\n"))
          (suffix "```"))
@@ -386,9 +400,7 @@ Adapted from ox-gfm."
 CONTENTS is the transcoded contents string. INFO is a plist
 holding export options."
   (if org-jekyll-md-include-yaml-front-matter
-      (concat
-       (org-jekyll-md--yaml-front-matter info)
-       contents)
+      (concat (org-jekyll-md--yaml-front-matter info) contents)
     contents))
 
 (defun org-jekyll-md-inner-template (contents info)
@@ -409,8 +421,9 @@ holding export options."
 ;;; YAML Front Matter
 
 (defun org-jekyll-md--get-option (info property-name &optional default)
-  "Get org export options, or an optional default, or (finally)
-an empty string."
+  "Get org export options, or an (optional) user-provided
+default, or (if user does not provide a default) an empty
+string."
   (let ((property (org-export-data (plist-get info property-name) info)))
     (format "%s" (or property default ""))))
 
@@ -423,7 +436,6 @@ an empty string."
     (let* ((layout-value
             (org-jekyll-md--get-option info
                                        :jekyll-layout org-jekyll-md-layout))
-           
            (title
             (concat "\ntitle: \""
                     (org-jekyll-md--get-option info
@@ -432,12 +444,10 @@ an empty string."
             (concat "\nexcerpt: \""
                     (org-jekyll-md--get-option info
                                                :subtitle) "\""))
-           
            ;; don't include the layout category if it's not specified
            (layout (if (not (string= layout-value ""))
                        (concat "\nlayout: " layout-value)
                      ""))
-           
            (categories
             (concat "\ncategories: "
                     (funcall convert-to-yaml-list
@@ -471,7 +481,7 @@ an empty string."
   "Export current buffer as a Markdown buffer adding some YAML front matter."
   (interactive)
   (org-export-to-buffer 'jekyll "*Org Jekyll-Markdown Export*"
-    async subtreep visible-only nil nil (lambda () (text-mode))))
+    async subtreep visible-only nil nil (lambda () (markdown-mode))))
 
 ;;;###autoload
 (defun org-jekyll-md-export-to-md (&optional async subtreep visible-only)
