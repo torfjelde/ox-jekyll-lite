@@ -6,7 +6,9 @@
 #+OPTIONS: toc:nil 
 #+OPTIONS: tex:t
 
-Here's some text that lives above the top level header.
+Here's some text that lives above the top level header. Note that the header, and
+equations, won't render nicely in GitHub, because this is Jekyll markdown, not Github
+markdown.
 
 * Top Level Header
 
@@ -20,7 +22,7 @@ how about *bolded stuff*
 
 How about footnotes?[fn:1] 
 
-** What about rendering math>
+** What about rendering math?
 
 Here's an equation:
 
