@@ -2,5 +2,81 @@
 
 This is a simple org export engine for Jekyll Markdown, built on top of =ox-md=.
 
-It is a fork of [[https://github.com/gonsie/ox-jekyll-md][@gonsie/ox-jekyll-md]], incorporating some changes based on
+This is a fork of [[https://github.com/gonsie/ox-jekyll-md][@gonsie/ox-jekyll-md]], incorporating some changes based on
 [[https://github.com/larstvei/ox-gfm][@larstvei/ox-gfm]] and [[https://github.com/kaushalmodi/ox-hugo][@kaushalmodi/ox-hugo]].
+
+** Installation
+
+To use, install directly from github, by doing
+
+#+BEGIN_SRC bash
+cd ~/.emacs.d/lisp
+git clone https://github.com/peterewills/ox-jekyll-lite.git
+#+END_SRC
+
+and then in your =.emacs= add
+
+#+BEGIN_SRC elisp
+(add-to-list 'load-path "~/.emacs.d/lisp/ox-jekyll-lite/")
+(require 'ox-jekyll-lite)
+(setq org-jekyll-project-root "~/code/jekyll/my-jekyll-site/")
+#+END_SRC
+
+Setting =org-jekyll-project-root= allows for file links to be exported treating the Jekyll
+root directory as the root of the filepath (see below).
+
+** Usage
+
+=ox-jekyll-lite= is designed to work with a single Jekyll project, and with one =.org= file
+per post. To use, write a post in org mode. The filename should follow the usual jekyll
+convention, so this one might be called =2019-09-24-post.org=.
+
+#+BEGIN_SRC 
+
+#+TITLE: My Cool Post
+#+SUBTITLE: This will be the excerpt.
+#+DATE: 2019-09-24
+
+#+STARTUP: showall indent
+#+OPTIONS: toc:nil 
+#+OPTIONS: tex:t
+
+Get ready for some cool posty stuff
+
+ * Org Mode and the Meaning of Life
+#+END_SRC
+
+and then do =C-c C-e j j=, and the following will get written to =2019-09-24-post.md=
+
+#+BEGIN_SRC
+---
+title: "My Cool Post"
+excerpt: "This will be the excerpt."
+date: 2019-09-24
+categories: 
+- post
+tags: 
+---
+Get ready for some cool posty stuff
+
+# Org Mode and the Meaning of Life
+
+<!----- Footnotes ----->
+#+END_SRC
+
+Make sure to add =*.org= to your =exclude= list in =_config.yaml=, so that Jekyll doesn't
+try to render the org files. If you render images (LaTex) in your org files, you'll also
+want to add =ltximg= to your =exclude= list.
+
+** Features
+
+- Translates latex delimiters in org into appropriate MathJax delimiters.
+- Exports footnotes in proper Markdown (not HTML), so that they play nice with Jekyll themes.
+- Files are linked relative to the Jekyll root directory, if possible (set =org-jekyll-project-root=)
+- Org links to images are rendered appropriately.
+
+If you have file links in your =.org= file, =ox-jekyll-lite= will attempt to render them
+relative to the root directory of the jekyll project, so that the files resolve
+correctly when Jekyll generates your site. If the file is not under the Jekyll
+directory, then a warning message will be printed. 
+
