@@ -80,3 +80,5 @@ relative to the root directory of the jekyll project, so that the files resolve
 correctly when Jekyll generates your site. If the file is not under the Jekyll
 directory, then a warning message will be printed. 
 
+See [[file:2019-09-22-org-test.org][the demo org file]] for more details on what things get rendered.
+

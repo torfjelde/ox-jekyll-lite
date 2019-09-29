@@ -1,0 +1,102 @@
+#+TITLE: Org Test
+#+SUBTITLE: Testing out stuff for org blogging.
+#+DATE: 2019-09-22
+
+#+STARTUP: showall indent
+#+OPTIONS: toc:nil 
+#+OPTIONS: tex:t
+
+Here's some text that lives above the top level header.
+
+* Top Level Header
+
+Here's some text under the first header.
+
+how about _underlined stuff_ 
+
+how about /italicized stuff/
+
+how about *bolded stuff*
+
+How about footnotes?[fn:1] 
+
+** What about rendering math>
+
+Here's an equation:
+
+$$ \oint_z f(z) \, dz $$
+
+Here's some inline math: $f(x) = x \log (x)$.
+
+* Does code work?
+
+#+BEGIN_SRC python
+from matplotlib import pyplot as plt
+plt.plot(range(10))  
+#+END_SRC
+
+#+BEGIN_SRC bash
+ls -alFh
+echo "emacs rocks"
+#+END_SRC
+
+What happens to results from an =org-babel= session?
+
+#+BEGIN_SRC ipython :async t :results drawer :session
+import numpy as np
+min(np.sin(x) for x in np.linspace(0,2*np.pi,100)) 
+#+END_SRC
+
+#+RESULTS:
+:RESULTS:
+# Out[3]:
+: -0.9998741276738751
+:END:
+
+They don't get rendered. That's OK for now - ultimately, it would be nice to have them
+render (including images).
+
+* Here's a table
+
+| Name     | Age | Phone |
+|----------+-----+-------|
+| P. Wills |  31 |   585 |
+| J. Doe   |  29 |   435 |
+
+* Links?
+
+[[mailto:peter@pwills.com][peter's email]]
+
+[[https://google.com][here's an (external) link]]
+
+* Images?
+
+[[https://hips.hearstapps.com/hmg-prod.s3.amazonaws.com/images/kitten-playing-with-toy-mouse-royalty-free-image-590055188-1542816918.jpg][kitties]]
+
+* TODO [7/7]
+SCHEDULED: <2019-09-21 Sat>
+
+Schedules get ignored, which is correct. Can schedule or deadline parts of the post if
+you want to.
+
+- [X] Fix underlining things
+- [X] Fix links
+- [X] *Fix equation delimiter rendering*
+- [X] Ignore =ltximg= directories
+- [X] Get preamble export working
+  - [X] Pass subtitle in as excerpt
+  - [X] Set category as "post", don't set layout
+- [X] Get footnotes exporting properly
+- [X] Make images export properly. 
+
+* TODO Eventually
+
+- [ ] Have =RESULTS= blocks from org-babel render in some nice way
+- [ ] Minor mode that exports whenever I save, as long as I'm in =_drafts= or =_posts=.
+- [ ] set =OPTIONS: comments:nil= and it will appear in the yaml front-matter
+
+* Footnotes
+
+[fn:1] Schwink!
+
+

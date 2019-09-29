@@ -135,6 +135,15 @@ so file paths will be linked as provided.")
          (suffix-matches (--filter (s-ends-with? it raw-link t) image-suffixes)))
     (not (null suffix-matches))))
 
+(defun org-jekyll-lite-link-maybe-image (desc path)
+  "If PATH is to a known image type, render the link as an image (with a
+  bang). Otherwise, render the image as a usual link."
+  (if (org-jekyll-lite-file-is-image? path)
+      ;; it's an image, so prepend a bang
+      (format "![%s](%s)" desc path)
+    ;; non-image file, so no bang
+    (format "[%s](%s)" desc path)))
+
 (defun org-jekyll-lite-link (link desc info)
   "Transcode a LINK into Markdown format. 
 
@@ -143,35 +152,24 @@ INFO is a plist used as a communication channel.
 
 This function will:
 - render images appropriately
-- return file paths relative to the jekyll project root
-- throw an exception if file paths are not in jekyll project
-
-Supported link types:
-- mailto
-- http/https
-- file"
+- return file paths relative to the jekyll project root"
   (let* ((raw-link (org-element-property :raw-link link))
          (raw-path (org-element-property :path link))
          (type (org-element-property :type link))
-         (desc (if desc desc raw-path)))
-    ;; (message "[ox-hugo-link DBG] link: %S" link)
-    ;; (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
-    ;; (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
-    ;; (message "[ox-hugo-link DBG] link type: %s" type)
-    (cond
-     ;; file links. make file paths treat jekyll root as root.
-     ((string= type "file")
-      (let* ((jekyll-path (org-jekyll-lite-resolve-file-path raw-path)))
-        (if (org-jekyll-lite-file-is-image? raw-path)
-            ;; it's an image, so prepend a bang
-            (format "![%s](%s)" desc jekyll-path)
-          ;; non-image file, so no bang
-          (format "[%s](%s)" desc jekyll-path))))        
-     (t
-      ;; none of the above. just use the raw link.
-      (if desc
-          (format "[%s](%s)" desc raw-link)
-        (format "[%s](%s)" raw-link raw-link))))))
+         (resolved-path
+          (cond
+           ;; if the path is to a file, make it treat the jekyll root directory as system
+           ;; root, which is how jekyll wants its links.
+           ((string= type "file")
+            (org-jekyll-lite-resolve-file-path raw-path))
+           ;; if not a file, then just use the raw link itself.
+           (t raw-link)
+         (desc (if desc desc resolved-path)))))
+    (message "[ox-hugo-link DBG] link: %S" link)
+    (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
+    (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
+    (message "[ox-hugo-link DBG] link type: %s" type)
+    (org-jekyll-lite-link-maybe-image desc resolved-path)))
 
 ;;;; text
 (defun org-jekyll-lite-underline (underline contents info)
