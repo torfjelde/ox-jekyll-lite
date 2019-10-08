@@ -5,6 +5,8 @@ This is a simple org export engine for Jekyll Markdown, built on top of =ox-md=.
 This is a fork of [[https://github.com/gonsie/ox-jekyll-md][@gonsie/ox-jekyll-md]], incorporating some changes based on
 [[https://github.com/larstvei/ox-gfm][@larstvei/ox-gfm]] and [[https://github.com/kaushalmodi/ox-hugo][@kaushalmodi/ox-hugo]].
 
+See [[http://www.pwills.com/post/2019/09/24/blogging-in-org.html][my blog post]] for more details.
+
 ** Installation
 
 To use, install directly from github, by doing
