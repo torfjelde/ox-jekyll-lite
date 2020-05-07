@@ -100,6 +100,8 @@ excerpt: Details on exporting org files into a jekyll-friendly markdown format.
     (inner-template . org-jekyll-lite-inner-template) 
     (footnote-reference . org-jekyll-lite-footnote-reference)
     (src-block . org-jekyll-lite-src-block)
+    (export-block . org-jekyll-lite-export-block)
+    (keyword . org-jekyll-lite-keyword)
     (latex-environment . org-jekyll-lite-latex-environment)
     (latex-fragment . org-jekyll-lite-latex-fragment)
     (link . org-jekyll-lite-link)
@@ -165,10 +167,10 @@ This function will:
            ;; if not a file, then just use the raw link itself.
            (t raw-link)
          (desc (if desc desc resolved-path)))))
-    (message "[ox-hugo-link DBG] link: %S" link)
-    (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
-    (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
-    (message "[ox-hugo-link DBG] link type: %s" type)
+    ;; (message "[ox-hugo-link DBG] link: %S" link)
+    ;; (message "[ox-hugo-link DBG] link path: %s" (org-element-property :path link))
+    ;; (message "[ox-hugo-link DBG] link filename: %s" (expand-file-name (plist-get (car (cdr link)) :path)))
+    ;; (message "[ox-hugo-link DBG] link type: %s" type)
     (org-jekyll-lite-link-maybe-image desc resolved-path)))
 
 ;;;; text
@@ -370,6 +372,23 @@ Adapted from ox-gfm."
          (prefix (concat "```" lang "\n"))
          (suffix "```"))
     (concat prefix code suffix)))
+
+(defun org-jekyll-lite-export-block (export-block contents info)
+  "Transcode a EXPORT-BLOCK element from Org to Markdown.
+CONTENTS is nil.  INFO is a plist holding contextual information."
+  ;; if we find `JEKYLL' → do same thing as is done inside `org-md-export-block' (but it filters)
+  ;; else fall back to using `org-md-export-block'.
+  (if (member (org-element-property :type export-block) '("JEKYLL"))
+      (org-remove-indentation (org-element-property :value export-block))
+    (org-md-export-block export-block contents info)))
+
+(defun org-jekyll-lite-keyword (keyword contents info)
+  "Transcode a KEYWORD element into Jekyll format.
+CONTENTS is nil.  INFO is a plist used as a communication
+channel."
+  (if (string-equal (org-element-property :key keyword) "JEKYLL")
+      (org-element-property :value keyword)
+    (org-md-keyword keyword contents info)))
 
 (defun org-jekyll-lite-table (table contents info)
   "Empty transformation. Org tables should be valid kramdown syntax."
